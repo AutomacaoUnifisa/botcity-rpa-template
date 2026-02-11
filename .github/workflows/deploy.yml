@@ -1,0 +1,32 @@
+name: Deploy Bot
+
+on: 
+  push:
+    branches: [main]
+
+jobs:
+  BotCity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Dar permissão ao build
+        run: chmod +x build.sh
+      
+      - name: Build do bot
+        run: ./build.sh
+      
+      - name: Deploy no Maestro
+        uses: botcity-dev/botcity-action-bots@latest
+        with:
+          update: true
+          deploy: false
+          release: true                              # ← Marca como ativa
+          version: '1.0.${{ github.run_number }}'   # ← Versão automática
+          botId: 'SEU_BOT_AQUI'                     # ← MUDE AQUI
+          technology: 'python'
+          botPath: './dist/bot.zip'                 # ← Ajuste se necessário
+        env:
+          LOGIN: ${{ secrets.LOGIN }}
+          SERVER: ${{ secrets.SERVER }}
+          KEY: ${{ secrets.KEY }}
