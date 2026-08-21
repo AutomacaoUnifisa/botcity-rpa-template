@@ -49,7 +49,9 @@ def main(credentials: Dict[str, str]):
     """
     simulated_task()
 
-    logger.info(credentials)
+    # Log only the credential names. Never the values: this log file is written to
+    # disk, uploaded to SharePoint and attached as a BotMaestro artifact.
+    logger.info(f"Credentials loaded: {sorted(credentials)}")
 
     logger.info("Task completed successfully.")
 
