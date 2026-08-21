@@ -1,9 +1,9 @@
 import argparse
 import os
 
-from botcity.botcity_local import BotRunnerLocal
-from botcity.botcity_maestro import BotRunnerMaestro
-from botcity.core.config import settings
+from botcity_aux.botcity_local import BotRunnerLocal
+from botcity_aux.botcity_maestro import BotRunnerMaestro
+from botcity_aux.core.config import settings
 
 
 def parse_args() -> argparse.Namespace:

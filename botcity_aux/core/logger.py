@@ -4,15 +4,17 @@ from pathlib import Path
 
 from loguru import logger
 
-from botcity.core.config import settings
+from botcity_aux.core.config import settings
 
 
 class LoggerConfig:
     """
     Configures the logger for the bot, creating a directory and log file with the specified name and date.
 
+    The bot name comes from `settings.BOT_NAME`, not from a constructor argument:
+    `log_dir` is the destination directory.
+
     Attributes:
-        bot_name (str): The name of the bot, used as a prefix in the log file name.
         log_dir (Path): The directory where log files will be saved.
         log_filename (str): The name of the log file, which includes the bot name and current date.
         log_path (str): The full path of the generated log file.
@@ -24,7 +26,6 @@ class LoggerConfig:
         and configuring the logger to save rotated logs.
 
         Args:
-            bot_name (str): The name of the bot to be used in the log file name.
             log_dir (str): The directory where logs will be saved (default: "logs").
         """
         self.log_filename: str = self._create_log_filename()

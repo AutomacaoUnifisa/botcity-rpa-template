@@ -5,7 +5,7 @@ from typing import List
 from loguru import logger
 from office365.sharepoint.client_context import ClientContext
 
-from botcity.core.config import settings
+from botcity_aux.core.config import settings
 
 
 class SharePointApi:
@@ -76,20 +76,6 @@ class SharePointApi:
             logger.error(
                 f"Error while listing folders in '{settings.SHAREPOINT_ROOT_LOG_FOLDER}': {e}"
             )
-            raise
-
-    def _list_files_in_folder(self, folder_name: str) -> List[str]:
-        try:
-            folder_path = f"{settings.SHAREPOINT_ROOT_LOG_FOLDER}/{folder_name[0]}"
-            folder = self.ctx.web.get_folder_by_server_relative_url(folder_path)
-            files = folder.files
-            self.ctx.load(files)
-            self.ctx.execute_query()
-
-            return [f.name for f in files if f.name is not None]
-
-        except Exception as e:
-            logger.error(f"Error while listing files in folder '{folder_name}': {e}")
             raise
 
     def upload_files(self, file_paths: List[str]) -> None:
