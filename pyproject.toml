@@ -1,24 +1,24 @@
 [project]
 name = "rpa-template"
-version = "0.1.0"
-description = ""
+version = "0.2.0"
+description = "Template for BotCity RPA automations, with BotMaestro integration, SharePoint log upload and execution logging to SQL Server."
 authors = [
-    {name = "Vinicius",email = "vinicius.arruda40@hotmail.com"},
-    {name = "Juan",email = "juan654.pablo@gmail.com"}
+    {name = "Pedro Henrique Figueira Silva",email = "pedro.silva@unifisa.com.br"}
 ]
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.11,<4.0"
+keywords = ["rpa", "automation", "botcity", "botmaestro", "template"]
 dependencies = [
     "gputil (>=1.4.0,<2.0.0)",
     "psutil (>=7.0.0,<8.0.0)",
     "loguru (>=0.7.3,<0.8.0)",
     "urllib3 (>=2.5.0,<3.0.0)",
     "botcity-maestro-sdk (>=0.8.0,<0.9.0)",
+    "pydantic (>=2.11.7,<3.0.0)",
     "pydantic-settings (>=2.10.1,<3.0.0)",
     "office365-rest-python-client (>=2.6.2,<3.0.0)",
-    "pyodbc (>=5.2.0,<6.0.0)",
-    "black (>=25.1.0,<26.0.0)",
-    "isort (>=6.0.1,<7.0.0)"
+    "pyodbc (>=5.2.0,<6.0.0)"
 ]
 
 
@@ -28,3 +28,14 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 package-mode = false
+
+# Formatters are development-only, so they stay out of `[project] dependencies`
+# and never ship to the machines that run the bots. `poetry install` still
+# installs them, since the dev group is included by default.
+[tool.poetry.group.dev.dependencies]
+black = ">=25.1.0,<26.0.0"
+isort = ">=6.0.1,<7.0.0"
+
+# Without this, isort and black undo each other's import wrapping.
+[tool.isort]
+profile = "black"

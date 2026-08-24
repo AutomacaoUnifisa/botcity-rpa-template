@@ -66,6 +66,7 @@ class DepartmentFolderNumber(StrEnum):
     OUVIDORIA = "11"
     RECOMPRA = "12"
     RH = "13"
+    GENTEGESTAO = "13"  # Shares folder 13 with RH
     REATIVACAO = "14"
     SEGUROS = "15"
     SUCESSO_DO_CLIENTE = "16"

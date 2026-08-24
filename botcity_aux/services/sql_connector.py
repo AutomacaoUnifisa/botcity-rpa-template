@@ -14,21 +14,13 @@ Classes:
 Usage Example:
     >>> from sql_server_pyodbc_dict import SQLDatabaseConnectorDict
 
-    >>> # Initialize a SQLDatabaseConnectorDict object for Windows Authentication
-    >>> sql_connector = SQLDatabaseConnectorDict(server='localhost', database='example_db', use_windows_auth=True)
+    >>> # Windows Authentication. `with` closes the connection even if the query raises.
+    >>> with SQLDatabaseConnectorDict(server='localhost', database='example_db', use_windows_auth=True) as sql_connector:
+    ...     result = sql_connector.execute_query("SELECT * FROM table_name WHERE column = ?", params=[value])
 
-    >>> # Or for SQL Server Authentication with username and password
-    >>> sql_connector = SQLDatabaseConnectorDict(server='localhost', database='example_db', use_windows_auth=False, username='user', password='password')
-
-    >>> # Connect to the database
-    >>> sql_connector.connect()
-
-    >>> # Execute a query
-    >>> query = "SELECT * FROM table_name WHERE column = ?"
-    >>> result = sql_connector.execute_query(query, params=[value])  # Returns list of dicts
-
-    >>> # Disconnect from the database
-    >>> sql_connector.disconnect()
+    >>> # SQL Server Authentication
+    >>> with SQLDatabaseConnectorDict(server='localhost', database='example_db', use_windows_auth=False, username='user', password='password') as sql_connector:
+    ...     result = sql_connector.execute_query("SELECT * FROM table_name WHERE column = ?", params=[value])
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -83,6 +75,22 @@ class SQLDatabaseConnectorDict:
         self.password = password
         self.connection = None
 
+    def __enter__(self) -> "SQLDatabaseConnectorDict":
+        """Opens the connection when entering a `with` block."""
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Closes the connection on exit, without masking a propagating exception."""
+        try:
+            self.disconnect()
+        except Exception:
+            if exc_type is None:
+                raise
+            logger.warning(
+                "Failed to close the database connection. Keeping the original error."
+            )
+
     def connect(self) -> None:
         """
         Establishes a connection to the SQL Server database.
@@ -131,6 +139,7 @@ class SQLDatabaseConnectorDict:
         try:
             if self.connection:
                 self.connection.close()
+                self.connection = None
                 logger.info("Successfully disconnected from the SQL database.")
         except pyodbc.Error as e:
             logger.exception("Failed to disconnect from the database.")

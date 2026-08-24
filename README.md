@@ -83,7 +83,7 @@ To run the bot, specify the desired environment:
 ### Configuration
 
 - **Environment Selection:** Use the ``--environment`` flag to specify the execution environment (``maestro`` or ``local``).
-- **Bot Details:** Set the bot name and server credentials in ``core/config.py`` or via environment variables.
+- **Bot Details:** Set the bot name and server credentials in ``botcity_aux/core/config.py`` or via environment variables.
 - **Logs Directory:** Logs are stored in the ``logs`` folder by default but can be customized.
 
 ### How It Works
@@ -99,7 +99,20 @@ To run the bot, specify the desired environment:
 
 3. **Error Handling:**
 
-    - Sends error messages and uploads logs to BotCity Maestro in case of failures.
+    - Retries the bot task ``MAX_RETRIES`` times after a failure, so the default
+      ``MAX_RETRIES = 0`` runs the automation a single time. Only raise it when
+      re-running the process from the start is safe.
+    - The task is finished in BotCity Maestro only **once**, after the retries are
+      over: while it is still retrying, the task keeps showing as running instead of
+      being reported as failed.
+    - On the final failure, sends the error message and uploads the log to BotCity
+      Maestro, then re-raises the exception.
+
+4. **Credentials:**
+
+    - Declared a single time in ``botcity_aux/core/credentials.py`` (``TASK_CREDENTIALS``) and
+      resolved for both environments through the ``maestro_sdk`` property, which
+      points to ``self`` in local mode and to ``self.maestro`` in maestro mode.
 
 ### Logs and Artifacts
 
@@ -118,9 +131,17 @@ To extend or modify the bot’s functionality:
 
 1. Implement your custom automation logic in ``src/main.py``.
 
-2. Add or modify utility classes such as ``BotRunnerLocal`` or ``BotRunnerMaestro``.
+2. Declare the credentials your automation needs in ``TASK_CREDENTIALS``
+   (``botcity_aux/core/credentials.py``), mapping the name used by ``main`` to the
+   BotMaestro ``(label, key)`` pair. They are fetched once and work in both the
+   local and the maestro runner.
 
-3. Use the ``_execute_bot_task`` method to define task-specific behavior.
+3. Add or modify utility classes such as ``BotRunnerLocal`` or ``BotRunnerMaestro``.
+
+4. Override the ``_execute_bot_task`` method in a runner only when one environment
+   needs to call ``main`` differently from the other (a desktop automation that
+   needs a different image set, for instance); the shared implementation lives in
+   ``MaestroCredentialsMixin``.
 
 ## Contributing
 

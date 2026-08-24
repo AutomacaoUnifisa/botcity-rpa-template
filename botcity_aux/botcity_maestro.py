@@ -1,24 +1,24 @@
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import GPUtil
 import psutil
-from loguru import logger
-
-from botcity.core.config import settings
-from botcity.core.logger import LoggerConfig
 from botcity.maestro import (
     AutomationTaskFinishStatus,
     BotExecution,
     BotMaestroSDK,
     ServerMessage,
 )
-from botcity.services.sharepoint import SharePointApi
-from botcity.services.sql_connector import SQLDatabaseConnectorDict
-from src.main import main
+from loguru import logger
+
+from botcity_aux.core.config import settings
+from botcity_aux.core.credentials import MaestroCredentialsMixin
+from botcity_aux.core.logger import LoggerConfig
+from botcity_aux.services.sharepoint import SharePointApi
+from botcity_aux.services.sql_connector import SQLDatabaseConnectorDict
 
 
-class BotRunnerMaestro:
+class BotRunnerMaestro(MaestroCredentialsMixin):
     """
     Class to handle execution of a BotCity bot with integration to BotMaestro,
     SharePoint, and optional database logging.
@@ -29,6 +29,9 @@ class BotRunnerMaestro:
         - Capture and log execution time, CPU/RAM/GPU usage.
         - Upload logs to BotMaestro and SharePoint.
         - Insert execution details into SQL database if enabled.
+
+    Credentials are declared once in `MaestroCredentialsMixin.TASK_CREDENTIALS`
+    and resolved through `self.maestro_sdk`, shared with `BotRunnerLocal`.
     """
 
     def __init__(
@@ -49,7 +52,7 @@ class BotRunnerMaestro:
             start_time (Optional[float]): Time when execution starts.
         """
         # initial config
-        self.logger: LoggerConfig = LoggerConfig(settings.BOT_NAME)
+        self.logger: LoggerConfig = LoggerConfig()
 
         # maestro config
         self.bot_maestro_sdk_raise: bool = bot_maestro_sdk_raise
@@ -98,36 +101,15 @@ class BotRunnerMaestro:
             logger.error(f"Failed to initialize BotMaestroSDK: {e}")
             raise e
 
-    def _get_credentials_sharepoint(self) -> Dict[str, str]:
+    @property
+    def maestro_sdk(self) -> BotMaestroSDK:
         """
-        Retrieves the SharePoint credentials from BotMaestro.
-
-        This method fetches the SharePoint site URL, username, and password from the BotMaestro
+        SDK instance used to read credentials from BotMaestro.
 
         Returns:
-            dict: A dictionary containing the SharePoint credentials.
+            BotMaestroSDK: The SDK instance created by `_setup_maestro`.
         """
-
-        credentials = {
-            "site_url": self.maestro.get_credential(
-                label=settings.MAESTRO_SHAREPOINT_LABEL,
-                key=settings.MAESTRO_SHAREPOINT_SITE_URL,
-            ),
-            "tenant": self.maestro.get_credential(
-                label=settings.MAESTRO_SHAREPOINT_LABEL,
-                key=settings.MAESTRO_SHAREPOINT_TENANT,
-            ),
-            "client_id": self.maestro.get_credential(
-                label=settings.MAESTRO_SHAREPOINT_LABEL,
-                key=settings.MAESTRO_SHAREPOINT_CLIENT_ID,
-            ),
-            "thumbprint": self.maestro.get_credential(
-                label=settings.MAESTRO_SHAREPOINT_LABEL,
-                key=settings.MAESTRO_SHAREPOINT_THUMBPRINT,
-            ),
-        }
-
-        return credentials
+        return self.maestro
 
     def _add_log_file_into_maestro(self) -> ServerMessage:
         """
@@ -213,16 +195,16 @@ class BotRunnerMaestro:
             dict: A dictionary containing the database credentials.
         """
         credentials_database = {
-            "server": self.maestro.get_credential(
+            "server": self.get_maestro_credential(
                 label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_SERVER
             ),
-            "database": self.maestro.get_credential(
+            "database": self.get_maestro_credential(
                 label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_DATABASE
             ),
-            "username": self.maestro.get_credential(
+            "username": self.get_maestro_credential(
                 label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_USERNAME
             ),
-            "password": self.maestro.get_credential(
+            "password": self.get_maestro_credential(
                 label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_PASSWORD
             ),
         }
@@ -243,19 +225,9 @@ class BotRunnerMaestro:
         Raises:
             Exception: If database connection or query execution fails.
         """
-        time = self._get_execution_time()
+        execution_time = self._get_execution_time()
 
         credentials = self._get_database_credentials()
-
-        sql_connector = SQLDatabaseConnectorDict(
-            server=credentials.get("server", ""),
-            database=credentials.get("database", ""),
-            use_windows_auth=False,
-            username=credentials.get("username"),
-            password=credentials.get("password"),
-        )
-
-        sql_connector.connect()
 
         params = [
             settings.BOT_NAME,
@@ -263,39 +235,117 @@ class BotRunnerMaestro:
             settings.SECTOR,
             settings.STAKEHOLDER,
             settings.RECURRENCE,
-            time,
+            execution_time,
             items_processed,
         ]
 
-        query = settings.SQL_QUERY_PATH
+        with SQLDatabaseConnectorDict(
+            server=credentials.get("server", ""),
+            database=credentials.get("database", ""),
+            use_windows_auth=False,
+            username=credentials.get("username"),
+            password=credentials.get("password"),
+        ) as sql_connector:
+            sql_connector.execute_query_from_file(settings.SQL_QUERY_PATH, params)
 
-        sql_connector.execute_query_from_file(query, params)
-
-        sql_connector.disconnect()
-
-    def _execute_bot_task(self) -> Optional[int]:
+    def _run_with_retries(self) -> Tuple[Optional[int], Optional[Exception]]:
         """
-        Executes the bot task and returns the number of processed items.
+        Runs the bot task, retrying it up to `settings.MAX_RETRIES` times.
 
-        This method prepares the credentials, calls the `main` function to execute
-        the bot's main workflow, and returns the number of processed items. If the
-        task fails or produces no result, `None` can be returned.
+        Nothing is reported to BotMaestro here: the task is only finished once, by
+        `run`, after every attempt has been exhausted. This keeps the task marked as
+        running in BotMaestro while it is still retrying.
 
         Returns:
-            Optional[int]:
-                The number of items processed if successful, otherwise `None`.
-
-        Example:
-            >>> result = self._execute_bot_task()
-            >>> if result:
-            ...     print(f"Processed {result} items")
-            ... else:
-            ...     print("No items processed.")
+            Tuple[Optional[int], Optional[Exception]]:
+                The number of items processed and `None` when an attempt succeeds,
+                or `None` and the last exception raised when all attempts fail.
         """
-        credentials = {"example1": "credential_1", "example2": "credential_2"}
+        total_attempts = settings.MAX_RETRIES + 1
 
-        items_processed = main(credentials)
-        return items_processed
+        for attempt in range(1, total_attempts + 1):
+            try:
+                self.start_time = time.time()
+                logger.info(
+                    f"Bot execution started. Attempt {attempt} of {total_attempts}"
+                )
+
+                items_processed = self._execute_bot_task()
+
+                logger.info(
+                    f"{settings.BOT_NAME} Bot execution completed on attempt "
+                    f"{attempt} of {total_attempts}."
+                )
+                return items_processed, None
+
+            except Exception as e:
+                logger.error(
+                    f"An error occurred during bot '{settings.BOT_NAME}' execution "
+                    f"on attempt {attempt} of {total_attempts}: {e}"
+                )
+
+                if attempt == total_attempts:
+                    logger.error(
+                        f"Max retries reached ({settings.MAX_RETRIES}). Giving up."
+                    )
+                    return None, e
+
+                logger.info("Retrying bot execution...")
+
+        return None, None
+
+    def _report_outcome_to_maestro(
+        self,
+        error: Optional[Exception],
+        execution_time: str,
+        resource_usage: str,
+    ) -> None:
+        """
+        Reports the execution outcome to BotMaestro, exactly once.
+
+        Each call is guarded so a reporting failure neither leaves the task stuck as
+        *running* nor replaces the original error.
+
+        Args:
+            error (Optional[Exception]): The error that failed the execution, or
+                `None` when it succeeded.
+            execution_time (str): Execution duration, for the success message.
+            resource_usage (str): CPU/RAM/GPU usage, for the success message.
+        """
+        if error is not None:
+            try:
+                self.maestro.error(
+                    int(self.execution.task_id),
+                    error,
+                    attachments=[self.logger.log_path],
+                )
+            except Exception as e:
+                logger.error(f"Failed to report the error to BotMaestro: {e}")
+
+        if error is not None:
+            status = AutomationTaskFinishStatus.FAILED
+            message = f"An error occurred during bot execution: {error}"
+        else:
+            status = AutomationTaskFinishStatus.SUCCESS
+            message = (
+                f"Execution time: {execution_time}\n"
+                f"Resource usage at end of execution: {resource_usage}"
+            )
+
+        try:
+            self.maestro.finish_task(self.execution.task_id, status, message)
+            logger.info(
+                f"Task {self.execution.task_id} finished in BotMaestro as {status.name}."
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to finish task {self.execution.task_id} in BotMaestro: {e}"
+            )
+
+        try:
+            self._add_log_file_into_maestro()
+        except Exception as e:
+            logger.error(f"Failed to upload the log file to BotMaestro: {e}")
 
     def run(self) -> None:
         """
@@ -305,75 +355,57 @@ class BotRunnerMaestro:
         - Logs execution time, CPU/RAM/GPU usage, and errors.
         - Uploads logs to SharePoint and BotMaestro.
         - Inserts execution details into SQL database if enabled.
-        - Marks the task as SUCCESS or FAILED in BotMaestro.
+        - Marks the task as SUCCESS or FAILED in BotMaestro **once**, only after all
+          retries are done, so a retrying task keeps showing as running in BotMaestro.
+        - Always reports, from a `finally` block: a failure while wrapping up marks
+          the task FAILED instead of leaving it stuck as running. The first error
+          wins, so it never hides the real automation error.
 
         Raises:
             Exception: If bot execution fails after all retries.
         """
-        attempts = 0
-        while attempts <= settings.MAX_RETRIES:
-            try:
-                self.start_time = time.time()
-                logger.info(f"Bot execution started. Attempt {attempts}")
+        error: Optional[Exception] = None
+        execution_time: str = "Execution time not available"
+        resource_usage: str = "Resource usage not available"
 
-                items_processed = self._execute_bot_task()
+        try:
+            items_processed, error = self._run_with_retries()
 
-                execution_time = self._get_execution_time()
-                resource_usage = self._get_resource_usage()
+            execution_time = self._get_execution_time()
+            resource_usage = self._get_resource_usage()
 
-                logger.info(
-                    f"{settings.BOT_NAME} Bot execution completed on attempt {attempts}."
-                )
-                logger.info(f"Execution time: {execution_time}")
-                logger.info(f"Resource usage at end of execution: {resource_usage}")
+            logger.info(f"Execution time: {execution_time}")
+            logger.info(f"Resource usage at end of execution: {resource_usage}")
 
-                if settings.USE_SHAREPOINT:
-                    self.sharepoint.upload_files([rf"{self.logger.log_path}"])
+            if error is None:
+                try:
+                    if not settings.USE_DATABASE:
+                        logger.info("Database logging is disabled.")
+                    elif items_processed is None or items_processed <= 0:
+                        logger.warning("No items processed or task failed.")
+                    else:
+                        logger.info(f"Items processed: {items_processed}")
+                        self._insert_database_log_execution(items_processed)
+                except Exception as e:
+                    error = e
+                    logger.error(f"Failed to log the execution into the database: {e}")
 
-                if not settings.USE_DATABASE:
-                    logger.info("Database logging is disabled.")
-                elif items_processed is None or items_processed <= 0:
-                    logger.warning("No items processed or task failed.")
-                else:
-                    logger.info(f"Items processed: {items_processed}")
-                    self._insert_database_log_execution(items_processed)
+            if settings.USE_SHAREPOINT:
+                try:
+                    self.sharepoint.upload_files([self.logger.log_path])
+                except Exception as e:
+                    logger.error(f"Failed to upload the log file to SharePoint: {e}")
+                    if error is None:
+                        error = e
 
-                success_message = f"""Execution time: {execution_time}\nResource usage at end of execution: {resource_usage}"""
+        except Exception as e:
+            # Anything unexpected in the bookkeeping above: keep the first error.
+            logger.exception("Unexpected failure while wrapping up the bot execution.")
+            if error is None:
+                error = e
 
-                self.maestro.finish_task(
-                    self.execution.task_id,
-                    AutomationTaskFinishStatus.SUCCESS,
-                    success_message,
-                )
+        finally:
+            self._report_outcome_to_maestro(error, execution_time, resource_usage)
 
-                break
-
-            except Exception as e:
-                attempts += 1
-                logger.error(
-                    f"An error occurred during bot '{settings.BOT_NAME}' execution: {e}"
-                )
-
-                self.maestro.error(
-                    int(self.execution.task_id), e, attachments=[self.logger.log_path]
-                )
-
-                self.maestro.finish_task(
-                    self.execution.task_id,
-                    AutomationTaskFinishStatus.FAILED,
-                    f"An error occurred during bot execution: {e}",
-                )
-
-                if attempts > settings.MAX_RETRIES:
-                    logger.error(
-                        f"Max retries reached ({settings.MAX_RETRIES}). Giving up."
-                    )
-                    if settings.USE_SHAREPOINT:
-                        self.sharepoint.upload_files([rf"{self.logger.log_path}"])
-                    raise e
-
-                else:
-                    logger.info(f"Retrying bot execution (attempt {attempts})...")
-
-            finally:
-                self._add_log_file_into_maestro()
+        if error is not None:
+            raise error
