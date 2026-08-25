@@ -49,7 +49,12 @@ class BotRunnerLocal(MaestroCredentialsMixin, BotMaestroSDK):
         # initial config
         self.logger: LoggerConfig = LoggerConfig(log_dir)
 
-        if settings.USE_SHAREPOINT:
+        self.use_sharepoint: bool = (
+            settings.USE_SHAREPOINT and settings.USE_SHAREPOINT_LOCAL
+        )
+        self.use_database: bool = settings.USE_DATABASE and settings.USE_DATABASE_LOCAL
+
+        if self.use_sharepoint:
             # Sharepoint credentials
             self.sharepoint_credentials = self._get_credentials_sharepoint()
 
@@ -144,7 +149,7 @@ class BotRunnerLocal(MaestroCredentialsMixin, BotMaestroSDK):
             ),
             "database": self.get_maestro_credential(
                 label=settings.MAESTRO_SQL_LABEL_HOMOL,
-                key=settings.MAESTRO_SQL_DATABASE_HOMOL,
+                key=settings.MAESTRO_SQL_DATABASE_INTERNAL_HOMOL,
             ),
         }
 
@@ -248,7 +253,7 @@ class BotRunnerLocal(MaestroCredentialsMixin, BotMaestroSDK):
         logger.info(f"Execution time: {self._get_execution_time()}")
         logger.info(f"Resource usage at end of execution: {self._get_resource_usage()}")
 
-        if settings.USE_SHAREPOINT:
+        if self.use_sharepoint:
             if error is None:
                 self.sharepoint.list_folders_by_number()
             self.sharepoint.upload_files([rf"{self.logger.log_path}"])
@@ -256,7 +261,7 @@ class BotRunnerLocal(MaestroCredentialsMixin, BotMaestroSDK):
         if error is not None:
             raise error
 
-        if not settings.USE_DATABASE:
+        if not self.use_database:
             logger.info("Database logging is disabled.")
         elif items_processed is None or items_processed <= 0:
             logger.warning("No items processed or task failed.")

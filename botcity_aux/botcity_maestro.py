@@ -199,7 +199,8 @@ class BotRunnerMaestro(MaestroCredentialsMixin):
                 label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_SERVER
             ),
             "database": self.get_maestro_credential(
-                label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_DATABASE
+                label=settings.MAESTRO_SQL_LABEL,
+                key=settings.MAESTRO_SQL_DATABASE_INTERNAL,
             ),
             "username": self.get_maestro_credential(
                 label=settings.MAESTRO_SQL_LABEL, key=settings.MAESTRO_SQL_USERNAME

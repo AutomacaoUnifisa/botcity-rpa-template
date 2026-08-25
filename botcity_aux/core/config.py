@@ -55,10 +55,11 @@ class Settings(BaseSettings):
     # Database production settings
     # =============================
     USE_DATABASE: bool = True
+    USE_DATABASE_LOCAL: bool = True
     SQL_QUERY_PATH: str = r"botcity_aux\query\insert_log.sql"
     MAESTRO_SQL_LABEL: str = "Your Maestro SQL Label Credential"
     MAESTRO_SQL_SERVER: str = "Your Maestro SQL Server Credential"
-    MAESTRO_SQL_DATABASE: str = "Your Maestro SQL Database Credential"
+    MAESTRO_SQL_DATABASE_INTERNAL: str = "Your Maestro SQL Database Internal Credential"
     MAESTRO_SQL_USERNAME: str = "Your Maestro SQL Username Credential"
     MAESTRO_SQL_PASSWORD: str = "Your Maestro SQL Password Credential"
 
@@ -67,12 +68,15 @@ class Settings(BaseSettings):
     # =============================
     MAESTRO_SQL_LABEL_HOMOL: str = "Your Maestro SQL Label Homol Credential"
     MAESTRO_SQL_SERVER_HOMOL: str = "Your Maestro SQL Server Homol Credential"
-    MAESTRO_SQL_DATABASE_HOMOL: str = "Your Maestro SQL Database Homol Credential"
+    MAESTRO_SQL_DATABASE_INTERNAL_HOMOL: str = (
+        "Your Maestro SQL Database Internal Homol Credential"
+    )
 
     # =============================
     # SharePoint settings
     # =============================
     USE_SHAREPOINT: bool = True
+    USE_SHAREPOINT_LOCAL: bool = False
     MAESTRO_SHAREPOINT_LABEL: str = "Your Maestro Sharepoint Label Credential"
     MAESTRO_SHAREPOINT_SITE_URL: str = "Your Maestro Sharepoint Site URL Credential"
     MAESTRO_SHAREPOINT_TENANT: str = "Your Maestro Sharepoint Tenant Credential"
