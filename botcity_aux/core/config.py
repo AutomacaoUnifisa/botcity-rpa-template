@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     MAESTRO_SHAREPOINT_THUMBPRINT: str = "Your Maestro Sharepoint Thumbprint Credential"
     CERTIFICATE_FILE_PATH: str = r"botcity_aux\cert\cert.pem"
 
-    MAESTRO_SHAREPOINT_SITE_URL_SUFFIX: str = "TIeDesenvolvimento"
+    MAESTRO_SHAREPOINT_SITE_URL_SUFFIX: str = "DesenvolvimentoIA"
     SHAREPOINT_ROOT_LOG_FOLDER: str = r"Documentos Compartilhados/Automações/Logs"
 
     # =============================
